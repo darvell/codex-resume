@@ -86,7 +86,7 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
     #preview {
         padding: 1 1;
         height: auto;
-        border-top: solid $accent 1pt;
+        border-top: solid $accent;
     }
 
     Input {
