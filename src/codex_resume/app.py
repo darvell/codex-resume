@@ -90,6 +90,7 @@ class SessionsApp(App[Optional[ResumeChoice]]):
         self._config = config or Config()
         self._extra_args = list(extra_args or self._config.default_extra_args)
         self._sessions: List[Session] = []
+        self._active_row_index: Optional[int] = None
 
     def compose(self) -> ComposeResult:  # type: ignore[override]
         yield Header(show_clock=True)
@@ -107,6 +108,7 @@ class SessionsApp(App[Optional[ResumeChoice]]):
         if self._sessions:
             self._table.focus()
             self._table.move_cursor(row=0, column=0)
+            self._set_active_row_index(0)
             self._refresh_details(0)
         else:
             self._details.update("No sessions found in ~/.codex/sessions")
@@ -127,9 +129,14 @@ class SessionsApp(App[Optional[ResumeChoice]]):
                 session.cwd or "-",
                 key=str(index),
             )
+        if self._sessions:
+            self._set_active_row_index(0)
+        else:
+            self._set_active_row_index(None)
 
     def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
         row_index = _row_key_to_index(event.row_key)
+        self._set_active_row_index(row_index)
         self._refresh_details(row_index)
 
     def _refresh_details(self, index: int) -> None:
@@ -155,6 +162,7 @@ class SessionsApp(App[Optional[ResumeChoice]]):
         await self._reload_sessions()
         if self._sessions:
             self._table.move_cursor(row=0, column=0)
+            self._set_active_row_index(0)
             self._refresh_details(0)
 
     def action_quit(self) -> None:
@@ -169,16 +177,15 @@ class SessionsApp(App[Optional[ResumeChoice]]):
             self._details.update(_render_session_detail(session, self._extra_args))
 
     def _current_session(self) -> Optional[Session]:
-        if not self._sessions or not self._table.row_count:
+        if not self._sessions:
             return None
-        coordinate = self._table.cursor_coordinate
-        if coordinate is None:
+        if self._active_row_index is None:
             return None
-        row_key = self._table.get_row_key_at(coordinate.row)
-        row_index = _row_key_to_index(row_key)
-        if row_index < 0 or row_index >= len(self._sessions):
-            return None
-        return self._sessions[row_index]
+        index = max(0, min(self._active_row_index, len(self._sessions) - 1))
+        return self._sessions[index]
+
+    def _set_active_row_index(self, index: Optional[int]) -> None:
+        self._active_row_index = index
 
 
 def _format_dt(dt_value: datetime) -> str:
