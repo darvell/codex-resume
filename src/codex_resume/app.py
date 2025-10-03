@@ -130,6 +130,7 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
         yield Footer()
 
     async def on_mount(self) -> None:
+        self._configure_columns()
         await self._reload_sessions()
         if self._sessions:
             self._table.focus()
@@ -139,8 +140,7 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
     async def _reload_sessions(self) -> None:
         root_path = None if self._sessions_root is None else Path(self._sessions_root)
         self._sessions = discover_sessions(root=root_path)
-        self._table.clear()
-        self._table.add_columns("Last", "ID", "Summary", "Dir")
+        self._table.clear(rows=True)
         for index, session in enumerate(self._sessions):
             summary_text = session.summary
             if summary_text == "No summary available" and session.preview:
@@ -236,6 +236,16 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
 
     def _dismiss_info(self, _: Optional[None]) -> None:
         self._show_details = False
+
+    def _configure_columns(self) -> None:
+        self._table.clear(columns=True)
+        self._table.add_column("Last", key="last", width=12, no_wrap=True)
+        self._table.add_column("ID", key="id", width=6, no_wrap=True)
+        self._table.add_column("Summary", key="summary")
+        self._table.add_column("Dir", key="dir", width=22, no_wrap=True)
+        summary_col = self._table.columns.get("summary")
+        if summary_col is not None:
+            summary_col.ratio = 4
 
 
 def _format_dt(dt_value: datetime) -> str:
