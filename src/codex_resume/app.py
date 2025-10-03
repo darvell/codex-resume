@@ -15,8 +15,7 @@ from textual.binding import Binding
 from textual.containers import Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, DataTable, Footer, Header, Input, Static
-from textual.events import Key, Resize
-from textual.widgets._data_table import Column, ColumnKey
+from textual.events import Key
 
 from .config import Config
 from .sessions import Session, discover_sessions
@@ -118,7 +117,6 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
         self._sessions: List[Session] = []
         self._active_row_index: Optional[int] = None
         self._show_details = False
-        self._column_keys: dict[str, ColumnKey] = {}
 
     def compose(self) -> ComposeResult:  # type: ignore[override]
         yield Header(show_clock=True)
@@ -154,7 +152,6 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
                 _shorten_cwd(session.cwd),
                 key=str(index),
             )
-        self.call_after_refresh(self._adjust_summary_column)
         if self._sessions:
             self._set_active_row_index(0)
             self._update_preview(0)
@@ -240,52 +237,20 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
     def _dismiss_info(self, _: Optional[None]) -> None:
         self._show_details = False
 
-    def on_resize(self, event: Resize) -> None:
-        self.call_after_refresh(self._adjust_summary_column)
-
     def _configure_columns(self) -> None:
         self._table.clear(columns=True)
-        self._column_keys = {
-            "last": self._table.add_column("Last", key="last", width=12),
-            "id": self._table.add_column("ID", key="id", width=6),
-            "summary": self._table.add_column("Summary", key="summary"),
-            "dir": self._table.add_column("Dir", key="dir", width=24),
-        }
-        for name, width in ("last", 12), ("id", 6), ("dir", 24):
-            column = self._get_column(name)
+        last_key = self._table.add_column("Last", width=12)
+        id_key = self._table.add_column("ID", width=6)
+        summary_key = self._table.add_column("Summary")
+        dir_key = self._table.add_column("Dir", width=24)
+        for key, width in ((last_key, 12), (id_key, 6), (dir_key, 24)):
+            column = self._table.columns.get(key)
             if column:
                 column.auto_width = False
                 column.width = width
-        summary_column = self._get_column("summary")
+        summary_column = self._table.columns.get(summary_key)
         if summary_column:
-            summary_column.auto_width = False
-            summary_column.width = 40
-        self.call_after_refresh(self._adjust_summary_column)
-
-    def _adjust_summary_column(self) -> None:
-        summary_column = self._get_column("summary")
-        if not summary_column:
-            return
-        total_width = self._table.content_region.width
-        if total_width <= 0:
-            return
-        padding = self._table.cell_padding * 2
-        fixed_render = 0
-        for name in ("last", "id", "dir"):
-            column = self._get_column(name)
-            if column:
-                fixed_render += column.get_render_width(self._table)
-        label_width = getattr(self._table, "_row_label_column_width", 0)
-        available = total_width - fixed_render - label_width
-        available = max(16, available - padding)
-        summary_column.width = available
-        summary_column.auto_width = False
-
-    def _get_column(self, name: str) -> Optional[Column]:
-        key = self._column_keys.get(name)
-        if key is None:
-            return None
-        return self._table.columns.get(key)
+            summary_column.auto_width = True
 
 
 def _format_dt(dt_value: datetime) -> str:
