@@ -172,9 +172,6 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
         self._set_active_row_index(row_index)
         self._update_preview(row_index)
 
-    def on_data_table_row_selected(self, _: DataTable.RowSelected) -> None:
-        self.action_resume()
-
     def action_resume(self) -> None:
         session = self._current_session()
         if session is None:
