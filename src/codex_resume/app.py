@@ -154,7 +154,7 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
                 summary_text = session.preview[0][1]
             self._table.add_row(
                 _format_relative(session.last_event_at or session.started_at),
-                session.id[:6],
+                session.id[:8],
                 _truncate(summary_text, 60),
                 _shorten_cwd(session.cwd, full=True),
                 key=str(index),
@@ -297,11 +297,11 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
             return
         row_key = str(index)
         if hidden:
-            values = ("HIDDEN", "██████", "████████████", "████████████")
+            values = ("HIDDEN", "████████", "████████████", "████████████")
         else:
             values = (
                 _format_relative(session.last_event_at or session.started_at),
-                session.id[:6],
+                session.id[:8],
                 _truncate(session.summary, 60),
                 _shorten_cwd(session.cwd, full=True),
             )
