@@ -317,8 +317,15 @@ def _shorten_cwd(cwd: Optional[str], full: bool = False) -> str:
     if not cwd:
         return "-"
     path = Path(cwd)
+    display = str(path)
+    try:
+        home = Path.home()
+        if display.startswith(str(home)):
+            display = "~" + display[len(str(home)) :]
+    except RuntimeError:
+        pass
     if full:
-        return str(path)
+        return display
     candidate = path.name or str(path)
     if len(candidate) <= 18:
         return candidate
