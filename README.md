@@ -12,13 +12,6 @@
 >
 > That said, this actually does work. It does the thing.
 
-## Why codex-resume?
-
-- **Zero thinking required** – point it at `~/.codex/sessions` and it auto-sorts everything by last activity.
-- **Live timeline** – “Last activity” timestamps update every few seconds, so you know what’s fresh.
-- **Privacy toggle** – smash `X` to hide messy rows mid-demo; unhide when you’re ready.
-- **Launch-ready** – press `Enter` or `R` and you’re back inside the Codex CLI with the same extra args.
-
 ## Quick Start
 
 ```bash
