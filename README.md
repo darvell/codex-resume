@@ -45,7 +45,7 @@ pip install codex-resume
 ## Usage
 
 ```bash
-codex-resume [--extra "--search ."] [--set-default-extra "--search ."]
+codex-resume [--extra "--search --yolo"] [--set-default-extra "--search --yolo"]
 ```
 
 - Arrow keys to navigate
