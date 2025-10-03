@@ -80,7 +80,7 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
     }
 
     DataTable {
-        width: 70%;
+        width: 100%;
     }
 
     Input {
