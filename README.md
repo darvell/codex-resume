@@ -2,7 +2,7 @@
 
 ![codex-resume main screen](docs/main_screen.png)
 
-`codex-resume` is a Textual-powered terminal UI that scans your `~/.codex/sessions` archive, shows each session’s metadata and chat preview, and lets you relaunch anything with `codex resume <id>` in the original working directory.
+`codex-resume` is a Textual-powered terminal UI built for resuming OpenAI Codex CLI sessions. It scans your `~/.codex/sessions` archive, surfaces metadata and chat previews, and relaunches any session with `codex resume <id>` in the original working directory.
 
 ![codex-resume info modal](docs/extra_info.png)
 
