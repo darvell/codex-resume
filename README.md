@@ -1,12 +1,24 @@
 # codex-resume
 
+![codex-resume main screen](docs/main_screen.png)
+
 `codex-resume` is a Textual-powered terminal UI that scans your `~/.codex/sessions` archive, shows each session’s metadata and chat preview, and lets you relaunch anything with `codex resume <id>` in the original working directory.
+
+![codex-resume info modal](docs/extra_info.png)
 
 > ⚠️ **WARNING WARNING VIBECODED GARBAGE ALERT** ⚠️
 >
 > was vibecoded. Install only if you do not fear slop.
 >
 > That said, this actually does work. It does the thing.
+
+## Why codex-resume?
+
+- **Zero thinking required** – point it at `~/.codex/sessions` and it auto-sorts everything by last activity.
+- **Live timeline** – “Last activity” timestamps update every few seconds, so you know which session is still cooking.
+- **Privacy toggle** – smash `X` to hide messy rows mid-demo; unhide when you’re ready.
+- **Full-path context** – see the exact working directory (with `~` shorthand) before resuming.
+- **Lightning restart** – press `Enter` or `R` and you’re back inside the Codex CLI with the same extra args.
 
 ## Quick Start
 
@@ -16,13 +28,14 @@ uvx codex-resume
 
 `uvx` will download the latest release, create an ephemeral environment, and launch the UI in one command. Use the arrow keys to pick a session, `E` to edit extra flags, and `Enter` to resume.
 
-## Features
+## Features at a Glance
 
 - Auto-discovers Codex CLI session logs and sorts them by last activity.
-- Displays summaries and multi-line chat previews so “no summary” sessions stay readable.
-- Shows rich metadata (CWD, CLI version, log path, event count) in a detail pane.
-- Resumes sessions in their recorded working directories, with optional extra CLI arguments.
-- Provides config helpers for persistent flags via `~/.config/codex-resume/config.json`.
+- Live “Last activity” column and preview pane refresh to stay accurate.
+- Multi-line chat previews so “no summary” sessions stay readable.
+- Hide/unhide rows on demand; info modal mirrors the hidden state.
+- Resumes sessions in their recorded working directories with optional extra args.
+- Stores default CLI flags in `~/.config/codex-resume/config.json`.
 
 ## Installation
 
@@ -46,19 +59,25 @@ pip install codex-resume
 
 ## Usage
 
-```
+### Command line
+
+```bash
 codex-resume [--extra "--search ."] [--set-default-extra "--search ."]
 ```
 
-- Arrow keys: navigate sessions
-- `Enter` / `R`: resume selected session
-- `E`: edit extra arguments
-- `I`: open/close an info popup for the highlighted session
-- `X`: toggle a hidden session (censors the row)
-- `F5` / `Ctrl+R`: refresh session list
-- `Q`: quit without resuming
+### Key bindings
 
-The detail pane shows the chat preview, metadata, and the exact command that will run.
+| Key            | Action                                    |
+|----------------|-------------------------------------------|
+| Arrow keys     | Move selection                            |
+| `Enter` / `R`  | Resume highlighted session                |
+| `E`            | Edit extra CLI arguments                  |
+| `I`            | Toggle info popup                         |
+| `X`            | Hide/unhide session row                   |
+| `F5` / `Ctrl+R`| Refresh session list                      |
+| `Q`            | Quit without resuming                     |
+
+The preview pane shows the latest chat snippets, and the info popup expands with full metadata (last activity, cwd, CLI version, log path, event count, preview history).
 
 ## Configuration
 
