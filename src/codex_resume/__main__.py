@@ -61,9 +61,9 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     override_extra = _split_args(args.extra) if args.extra is not None else None
 
-    from .app import ResumeChoice, SessionsApp
+    from .app import CodexResumeApp, ResumeChoice
 
-    app = SessionsApp(
+    app = CodexResumeApp(
         sessions_root=str(args.sessions_root) if args.sessions_root else None,
         config=config,
         extra_args=override_extra,

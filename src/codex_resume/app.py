@@ -56,7 +56,8 @@ class ExtraArgsScreen(ModalScreen[Optional[List[str]]]):
         self.dismiss(_parse_extra_args(text))
 
 
-class SessionsApp(App[Optional[ResumeChoice]]):
+class CodexResumeApp(App[Optional[ResumeChoice]]):
+    TITLE = "codex-resume"
     CSS = """
     #main {
         height: 1fr;
@@ -79,6 +80,7 @@ class SessionsApp(App[Optional[ResumeChoice]]):
         Binding("enter", "resume", "Resume"),
         Binding("r", "resume", "Resume"),
         Binding("e", "edit_extra", "Extra Args"),
+        Binding("i", "toggle_info", "Info Panel"),
         Binding("f5", "refresh", "Refresh"),
         Binding("ctrl+r", "refresh", "Refresh"),
         Binding("q", "quit", "Quit"),
@@ -91,6 +93,7 @@ class SessionsApp(App[Optional[ResumeChoice]]):
         self._extra_args = list(extra_args or self._config.default_extra_args)
         self._sessions: List[Session] = []
         self._active_row_index: Optional[int] = None
+        self._show_details = False
 
     def compose(self) -> ComposeResult:  # type: ignore[override]
         yield Header(show_clock=True)
@@ -100,6 +103,7 @@ class SessionsApp(App[Optional[ResumeChoice]]):
             self._table.zebra_stripes = True
             yield self._table
             self._details = Static(id="details")
+            self._details.display = False
             yield self._details
         yield Footer()
 
@@ -109,7 +113,8 @@ class SessionsApp(App[Optional[ResumeChoice]]):
             self._table.focus()
             self._table.move_cursor(row=0, column=0)
             self._set_active_row_index(0)
-            self._refresh_details(0)
+            if self._show_details:
+                self._refresh_details(0)
         else:
             self._details.update("No sessions found in ~/.codex/sessions")
 
@@ -137,7 +142,8 @@ class SessionsApp(App[Optional[ResumeChoice]]):
     def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
         row_index = _row_key_to_index(event.row_key)
         self._set_active_row_index(row_index)
-        self._refresh_details(row_index)
+        if self._show_details:
+            self._refresh_details(row_index)
 
     def _refresh_details(self, index: int) -> None:
         if not self._sessions:
@@ -145,6 +151,7 @@ class SessionsApp(App[Optional[ResumeChoice]]):
         session = self._sessions[min(index, len(self._sessions) - 1)]
         detail = _render_session_detail(session, self._extra_args)
         self._details.update(detail)
+        self._details.display = True
 
     def action_resume(self) -> None:
         session = self._current_session()
@@ -163,7 +170,8 @@ class SessionsApp(App[Optional[ResumeChoice]]):
         if self._sessions:
             self._table.move_cursor(row=0, column=0)
             self._set_active_row_index(0)
-            self._refresh_details(0)
+            if self._show_details:
+                self._refresh_details(0)
 
     def action_quit(self) -> None:
         self.exit(None)
@@ -173,7 +181,7 @@ class SessionsApp(App[Optional[ResumeChoice]]):
             return
         self._extra_args = result
         session = self._current_session()
-        if session:
+        if session and self._show_details:
             self._details.update(_render_session_detail(session, self._extra_args))
 
     def _current_session(self) -> Optional[Session]:
@@ -186,6 +194,15 @@ class SessionsApp(App[Optional[ResumeChoice]]):
 
     def _set_active_row_index(self, index: Optional[int]) -> None:
         self._active_row_index = index
+        if index is None and self._details:
+            self._details.display = False
+
+    def action_toggle_info(self) -> None:
+        self._show_details = not self._show_details
+        if self._show_details and self._current_session():
+            self._refresh_details(self._active_row_index or 0)
+        else:
+            self._details.display = False
 
 
 def _format_dt(dt_value: datetime) -> str:
