@@ -16,6 +16,7 @@ from textual.containers import Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, DataTable, Footer, Header, Input, Static
 from textual.events import Key
+from textual.widgets._data_table import ColumnKey
 
 from .config import Config
 from .sessions import Session, discover_sessions
@@ -104,6 +105,7 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
         Binding("r", "resume", "Resume"),
         Binding("e", "edit_extra", "Extra Args"),
         Binding("i", "toggle_info", "Info Panel"),
+        Binding("x", "toggle_hidden", "Hide"),
         Binding("f5", "refresh", "Refresh"),
         Binding("ctrl+r", "refresh", "Refresh"),
         Binding("q", "quit", "Quit"),
@@ -117,6 +119,9 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
         self._sessions: List[Session] = []
         self._active_row_index: Optional[int] = None
         self._show_details = False
+        self._hidden_sessions: set[str] = set()
+        self._session_index: dict[str, int] = {}
+        self._column_keys: dict[str, ColumnKey] = {}
 
     def compose(self) -> ComposeResult:  # type: ignore[override]
         yield Header(show_clock=True)
@@ -140,6 +145,7 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
     async def _reload_sessions(self) -> None:
         root_path = None if self._sessions_root is None else Path(self._sessions_root)
         self._sessions = discover_sessions(root=root_path)
+        self._session_index = {session.id: idx for idx, session in enumerate(self._sessions)}
         self._table.clear()
         for index, session in enumerate(self._sessions):
             summary_text = session.summary
@@ -149,9 +155,10 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
                 _format_relative(session.last_event_at or session.started_at),
                 session.id[:6],
                 _truncate(summary_text, 60),
-                _shorten_cwd(session.cwd),
+                _shorten_cwd(session.cwd, full=True),
                 key=str(index),
             )
+        self._apply_hidden_markers()
         if self._sessions:
             self._set_active_row_index(0)
             self._update_preview(0)
@@ -213,11 +220,29 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
         else:
             self._show_details = False
 
+    def action_toggle_hidden(self) -> None:
+        session = self._current_session()
+        if session is None:
+            return
+        if session.id in self._hidden_sessions:
+            self._hidden_sessions.remove(session.id)
+            self._set_row_values(session, hidden=False)
+        else:
+            self._hidden_sessions.add(session.id)
+            self._set_row_values(session, hidden=True)
+        if self._show_details:
+            self._open_info_dialog(session)
+        else:
+            self._update_preview(self._active_row_index or 0)
+
     def _update_preview(self, index: int) -> None:
         if not self._sessions or index < 0 or index >= len(self._sessions):
             self._preview.update("")
             return
         session = self._sessions[index]
+        if session.id in self._hidden_sessions:
+            self._preview.update("Session hidden. Press X to reveal.")
+            return
         lines: List[str] = []
         lines.append(f"Summary: {session.summary}")
         last_time = _format_relative(session.last_event_at or session.started_at)
@@ -231,7 +256,10 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
         self._preview.update("\n".join(lines))
 
     def _open_info_dialog(self, session: Session) -> None:
-        panel = _render_session_detail(session, self._extra_args)
+        if session.id in self._hidden_sessions:
+            panel = Panel("Session hidden. Press X to reveal.", title="Session Hidden", border_style="red")
+        else:
+            panel = _render_session_detail(session, self._extra_args)
         self.push_screen(InfoModal(panel), self._dismiss_info)
 
     def _dismiss_info(self, _: Optional[None]) -> None:
@@ -239,18 +267,49 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
 
     def _configure_columns(self) -> None:
         self._table.clear(columns=True)
-        last_key = self._table.add_column("Last", width=12)
-        id_key = self._table.add_column("ID", width=6)
-        summary_key = self._table.add_column("Summary")
-        dir_key = self._table.add_column("Dir", width=24)
-        for key, width in ((last_key, 12), (id_key, 6), (dir_key, 24)):
-            column = self._table.columns.get(key)
+        self._column_keys = {
+            "last": self._table.add_column("Last", width=12),
+            "id": self._table.add_column("ID", width=6),
+            "summary": self._table.add_column("Summary"),
+            "dir": self._table.add_column("Dir"),
+        }
+        for name in ("last", "id"):
+            column = self._get_column(name)
             if column:
                 column.auto_width = False
-                column.width = width
-        summary_column = self._table.columns.get(summary_key)
-        if summary_column:
-            summary_column.auto_width = True
+        dir_column = self._get_column("dir")
+        if dir_column:
+            dir_column.auto_width = True
+
+    def _get_column(self, name: str):
+        key = self._column_keys.get(name)
+        if key is None:
+            return None
+        return self._table.columns.get(key)
+
+    def _set_row_values(self, session: Session, hidden: bool) -> None:
+        index = self._session_index.get(session.id)
+        if index is None:
+            return
+        row_key = str(index)
+        if hidden:
+            values = ("HIDDEN", "██████", "████████████", "████████████")
+        else:
+            values = (
+                _format_relative(session.last_event_at or session.started_at),
+                session.id[:6],
+                _truncate(session.summary, 60),
+                _shorten_cwd(session.cwd, full=True),
+            )
+        for column_name, value in zip(("last", "id", "summary", "dir"), values):
+            column = self._get_column(column_name)
+            if column is None:
+                continue
+            self._table.update_cell(row_key, column.key, value)
+
+    def _apply_hidden_markers(self) -> None:
+        for session in self._sessions:
+            self._set_row_values(session, hidden=session.id in self._hidden_sessions)
 
 
 def _format_dt(dt_value: datetime) -> str:

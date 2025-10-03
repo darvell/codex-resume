@@ -54,6 +54,7 @@ codex-resume [--extra "--search ."] [--set-default-extra "--search ."]
 - `Enter` / `R`: resume selected session
 - `E`: edit extra arguments
 - `I`: open/close an info popup for the highlighted session
+- `X`: toggle a hidden session (censors the row)
 - `F5` / `Ctrl+R`: refresh session list
 - `Q`: quit without resuming
 
