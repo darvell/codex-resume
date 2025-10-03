@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import shlex
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Iterable, List, Optional
 
@@ -12,7 +12,7 @@ from rich.table import Table
 from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal
+from textual.containers import Vertical
 from textual.screen import ModalScreen
 from textual.widgets import Button, DataTable, Footer, Header, Input, Static
 from textual.events import Key
@@ -83,6 +83,12 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
         width: 100%;
     }
 
+    #preview {
+        padding: 1 1;
+        height: auto;
+        border-top: solid $accent 1pt;
+    }
+
     Input {
         border: tall $accent-lighten-2;
     }
@@ -114,11 +120,13 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
 
     def compose(self) -> ComposeResult:  # type: ignore[override]
         yield Header(show_clock=True)
-        with Horizontal(id="main"):
+        with Vertical(id="main"):
             self._table = DataTable(id="sessions")
             self._table.cursor_type = "row"
             self._table.zebra_stripes = True
             yield self._table
+            self._preview = Static(id="preview")
+            yield self._preview
         yield Footer()
 
     async def on_mount(self) -> None:
@@ -132,26 +140,29 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
         root_path = None if self._sessions_root is None else Path(self._sessions_root)
         self._sessions = discover_sessions(root=root_path)
         self._table.clear()
-        self._table.add_columns("Started", "ID", "Summary", "CWD")
+        self._table.add_columns("Last", "ID", "Summary", "Dir")
         for index, session in enumerate(self._sessions):
             summary_text = session.summary
             if summary_text == "No summary available" and session.preview:
                 summary_text = session.preview[0][1]
             self._table.add_row(
-                _format_dt(session.started_at),
-                session.id[:8],
-                _truncate(summary_text, 90),
-                session.cwd or "-",
+                _format_relative(session.last_event_at or session.started_at),
+                session.id[:6],
+                _truncate(summary_text, 60),
+                _shorten_cwd(session.cwd),
                 key=str(index),
             )
         if self._sessions:
             self._set_active_row_index(0)
+            self._update_preview(0)
         else:
             self._set_active_row_index(None)
+            self._preview.update("No sessions found in ~/.codex/sessions")
 
     def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
         row_index = _row_key_to_index(event.row_key)
         self._set_active_row_index(row_index)
+        self._update_preview(row_index)
 
     def action_resume(self) -> None:
         session = self._current_session()
@@ -170,6 +181,7 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
         if self._sessions:
             self._table.move_cursor(row=0, column=0)
             self._set_active_row_index(0)
+            self._update_preview(0)
 
     def action_quit(self) -> None:
         self.exit(None)
@@ -201,6 +213,23 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
         else:
             self._show_details = False
 
+    def _update_preview(self, index: int) -> None:
+        if not self._sessions or index < 0 or index >= len(self._sessions):
+            self._preview.update("")
+            return
+        session = self._sessions[index]
+        lines: List[str] = []
+        lines.append(f"Summary: {session.summary}")
+        last_time = _format_relative(session.last_event_at or session.started_at)
+        lines.append(f"Last activity {last_time}")
+        if session.cwd:
+            lines.append(f"Directory {_shorten_cwd(session.cwd, full=True)}")
+        if session.preview:
+            for role, snippet in session.preview[:2]:
+                label = (role or "msg").capitalize()
+                lines.append(f"{label}: {_truncate(snippet, 70)}")
+        self._preview.update("\n".join(lines))
+
     def _open_info_dialog(self, session: Session) -> None:
         panel = _render_session_detail(session, self._extra_args)
         self.push_screen(InfoModal(panel), self._dismiss_info)
@@ -223,7 +252,7 @@ def _render_session_detail(session: Session, extra_args: Iterable[str]) -> Panel
     table.add_row("Session ID", session.id)
     table.add_row("Started", _format_verbose_dt(session.started_at))
     if session.last_event_at:
-        table.add_row("Last Event", _format_verbose_dt(session.last_event_at))
+        table.add_row("Last Event", f"{_format_verbose_dt(session.last_event_at)} ({_format_relative(session.last_event_at)})")
     if session.cwd:
         table.add_row("Working Dir", session.cwd)
     if session.cli_version:
@@ -251,6 +280,49 @@ def _render_session_detail(session: Session, extra_args: Iterable[str]) -> Panel
 def _format_verbose_dt(dt_value: datetime) -> str:
     local = dt_value.astimezone()
     return local.strftime("%Y-%m-%d %H:%M:%S %Z")
+
+
+def _format_relative(dt_value: datetime) -> str:
+    now = datetime.now(timezone.utc)
+    target = dt_value.astimezone(timezone.utc)
+    delta = now - target
+    if delta < timedelta(seconds=0):
+        delta = timedelta(seconds=0)
+    seconds = int(delta.total_seconds())
+    if seconds < 60:
+        return f"{seconds}s ago"
+    minutes = seconds // 60
+    if minutes < 60:
+        return f"{minutes}m ago"
+    hours = minutes // 60
+    if hours < 48:
+        rem_minutes = minutes % 60
+        if rem_minutes:
+            return f"{hours}h {rem_minutes}m ago"
+        return f"{hours}h ago"
+    days = hours // 24
+    if days < 14:
+        return f"{days}d ago"
+    weeks = days // 7
+    if weeks < 8:
+        return f"{weeks}w ago"
+    months = days // 30
+    if months < 18:
+        return f"{months}mo ago"
+    years = days // 365
+    return f"{years}y ago"
+
+
+def _shorten_cwd(cwd: Optional[str], full: bool = False) -> str:
+    if not cwd:
+        return "-"
+    path = Path(cwd)
+    if full:
+        return str(path)
+    candidate = path.name or str(path)
+    if len(candidate) <= 18:
+        return candidate
+    return candidate[:8] + "…" + candidate[-8:]
 
 
 def _truncate(value: str, limit: int) -> str:
