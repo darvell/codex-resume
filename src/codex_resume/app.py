@@ -239,11 +239,13 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
 
     def _configure_columns(self) -> None:
         self._table.clear(columns=True)
-        self._table.add_column("Last", key="last", width=12, no_wrap=True)
-        self._table.add_column("ID", key="id", width=6, no_wrap=True)
-        self._table.add_column("Summary", key="summary")
-        self._table.add_column("Dir", key="dir", width=22, no_wrap=True)
-        summary_col = self._table.columns.get("summary")
+        last_col = self._table.add_column("Last", key="last", width=12)
+        id_col = self._table.add_column("ID", key="id", width=6)
+        summary_col = self._table.add_column("Summary", key="summary")
+        dir_col = self._table.add_column("Dir", key="dir", width=22)
+        for column in (last_col, id_col, dir_col):
+            if column is not None:
+                column.no_wrap = True
         if summary_col is not None:
             summary_col.ratio = 4
 
