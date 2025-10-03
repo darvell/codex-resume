@@ -140,7 +140,7 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
     async def _reload_sessions(self) -> None:
         root_path = None if self._sessions_root is None else Path(self._sessions_root)
         self._sessions = discover_sessions(root=root_path)
-        self._table.clear(rows=True)
+        self._table.clear()
         for index, session in enumerate(self._sessions):
             summary_text = session.summary
             if summary_text == "No summary available" and session.preview:
