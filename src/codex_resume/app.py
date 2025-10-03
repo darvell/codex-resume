@@ -241,7 +241,6 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
         self._show_details = False
 
     def on_resize(self, event: Resize) -> None:
-        super().on_resize(event)
         self.call_after_refresh(self._adjust_summary_column)
 
     def _configure_columns(self) -> None:
