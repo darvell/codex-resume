@@ -156,7 +156,7 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
 
     async def on_unmount(self) -> None:
         if self._relative_timer:
-            self._relative_timer.cancel()
+            self._relative_timer.stop()
             self._relative_timer = None
 
     async def _reload_sessions(self) -> None:
