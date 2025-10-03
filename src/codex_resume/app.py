@@ -17,6 +17,7 @@ from textual.screen import ModalScreen
 from textual.widgets import Button, DataTable, Footer, Header, Input, Static
 from textual.events import Key
 from textual.widgets._data_table import ColumnKey
+from textual.timer import Timer
 
 from .config import Config
 from .sessions import Session, discover_sessions
@@ -64,15 +65,22 @@ class InfoModal(ModalScreen[None]):
     def __init__(self, panel: Panel) -> None:
         super().__init__()
         self._panel = panel
+        self._body: Optional[Static] = None
 
     def compose(self) -> ComposeResult:  # type: ignore[override]
-        yield Static(self._panel)
+        self._body = Static(self._panel)
+        yield self._body
         yield Static("Press Enter, Esc, or Q to close.", classes="info-footer")
 
     def on_key(self, event: Key) -> None:
         if event.key.lower() in {"escape", "enter", "q", "i"}:
             event.stop()
             self.dismiss(None)
+
+    def update_panel(self, panel: Panel) -> None:
+        self._panel = panel
+        if self._body:
+            self._body.update(panel)
 
 class CodexResumeApp(App[Optional[ResumeChoice]]):
     TITLE = "codex-resume"
@@ -123,9 +131,11 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
         self._hidden_sessions: set[str] = set()
         self._session_index: dict[str, int] = {}
         self._column_keys: dict[str, ColumnKey] = {}
+        self._relative_timer: Optional[Timer] = None
+        self._info_modal: Optional[InfoModal] = None
 
     def compose(self) -> ComposeResult:  # type: ignore[override]
-        yield Header(show_clock=True)
+        yield Header(show_clock=False)
         with Vertical(id="main"):
             self._table = DataTable(id="sessions")
             self._table.cursor_type = "row"
@@ -142,6 +152,12 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
             self._table.focus()
             self._table.move_cursor(row=0, column=0)
             self._set_active_row_index(0)
+        self._relative_timer = self.set_interval(5, self._refresh_relative_times, pause=False)
+
+    async def on_unmount(self) -> None:
+        if self._relative_timer:
+            self._relative_timer.cancel()
+            self._relative_timer = None
 
     async def _reload_sessions(self) -> None:
         root_path = None if self._sessions_root is None else Path(self._sessions_root)
@@ -201,6 +217,8 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
         session = self._current_session()
         if session and self._show_details:
             self._open_info_dialog(session)
+        elif self._active_row_index is not None:
+            self._update_preview(self._active_row_index)
 
     def _current_session(self) -> Optional[Session]:
         if not self._sessions:
@@ -233,8 +251,8 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
             self._set_row_values(session, hidden=True)
         if self._show_details:
             self._open_info_dialog(session)
-        else:
-            self._update_preview(self._active_row_index or 0)
+        elif self._active_row_index is not None:
+            self._update_preview(self._active_row_index)
 
     def _update_preview(self, index: int) -> None:
         if not self._sessions or index < 0 or index >= len(self._sessions):
@@ -261,10 +279,16 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
             panel = Panel("Session hidden. Press X to reveal.", title="Session Hidden", border_style="red")
         else:
             panel = _render_session_detail(session, self._extra_args)
-        self.push_screen(InfoModal(panel), self._dismiss_info)
+        if self._info_modal:
+            self._info_modal.update_panel(panel)
+            return
+        modal = InfoModal(panel)
+        self._info_modal = modal
+        self.push_screen(modal, self._dismiss_info)
 
     def _dismiss_info(self, _: Optional[None]) -> None:
         self._show_details = False
+        self._info_modal = None
 
     def _configure_columns(self) -> None:
         self._table.clear(columns=True)
@@ -311,6 +335,24 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
     def _apply_hidden_markers(self) -> None:
         for session in self._sessions:
             self._set_row_values(session, hidden=session.id in self._hidden_sessions)
+
+    def _refresh_relative_times(self) -> None:
+        if not self._sessions:
+            return
+        last_column = self._get_column("last")
+        if last_column is None:
+            return
+        for session in self._sessions:
+            index = self._session_index.get(session.id)
+            if index is None or session.id in self._hidden_sessions:
+                continue
+            row_key = str(index)
+            new_value = _format_relative(session.last_event_at or session.started_at)
+            self._table.update_cell(row_key, last_column.key, new_value)
+        if self._active_row_index is not None:
+            self._update_preview(self._active_row_index)
+        if self._show_details and self._info_modal and self._current_session():
+            self._open_info_dialog(self._current_session())
 
 
 def _format_dt(dt_value: datetime) -> str:
