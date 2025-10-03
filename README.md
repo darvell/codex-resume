@@ -18,7 +18,13 @@
 uvx codex-resume
 ```
 
-`uvx` will download the latest release, create an ephemeral environment, and launch the UI in one command. Use the arrow keys to pick a session, `E` to edit extra flags, and `Enter` to resume.
+`uvx` will download the latest release, create an ephemeral environment, and launch the UI in one command. Prefer `pipx` instead? Same idea:
+
+```bash
+pipx run codex-resume
+```
+
+Either way, arrow keys pick a session, `E` edits extra flags, and `Enter` resumes.
 
 ## Installation
 
