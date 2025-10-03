@@ -53,7 +53,7 @@ codex-resume [--extra "--search ."] [--set-default-extra "--search ."]
 - Arrow keys: navigate sessions
 - `Enter` / `R`: resume selected session
 - `E`: edit extra arguments
-- `I`: toggle the info panel
+- `I`: open/close an info popup for the highlighted session
 - `F5` / `Ctrl+R`: refresh session list
 - `Q`: quit without resuming
 

@@ -15,6 +15,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal
 from textual.screen import ModalScreen
 from textual.widgets import Button, DataTable, Footer, Header, Input, Static
+from textual.events import Key
 
 from .config import Config
 from .sessions import Session, discover_sessions
@@ -56,6 +57,21 @@ class ExtraArgsScreen(ModalScreen[Optional[List[str]]]):
         self.dismiss(_parse_extra_args(text))
 
 
+class InfoModal(ModalScreen[None]):
+    """Modal overlay presenting session details."""
+
+    def __init__(self, panel: Panel) -> None:
+        super().__init__()
+        self._panel = panel
+
+    def compose(self) -> ComposeResult:  # type: ignore[override]
+        yield Static(self._panel)
+        yield Static("Press Enter, Esc, or Q to close.", classes="info-footer")
+
+    def on_key(self, event: Key) -> None:
+        if event.key.lower() in {"escape", "enter", "q", "i"}:
+            self.dismiss(None)
+
 class CodexResumeApp(App[Optional[ResumeChoice]]):
     TITLE = "codex-resume"
     CSS = """
@@ -67,12 +83,13 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
         width: 70%;
     }
 
-    #details {
-        padding: 1 2;
-    }
-
     Input {
         border: tall $accent-lighten-2;
+    }
+
+    .info-footer {
+        padding: 1 2;
+        color: $text-muted;
     }
     """
 
@@ -102,9 +119,6 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
             self._table.cursor_type = "row"
             self._table.zebra_stripes = True
             yield self._table
-            self._details = Static(id="details")
-            self._details.display = False
-            yield self._details
         yield Footer()
 
     async def on_mount(self) -> None:
@@ -113,10 +127,6 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
             self._table.focus()
             self._table.move_cursor(row=0, column=0)
             self._set_active_row_index(0)
-            if self._show_details:
-                self._refresh_details(0)
-        else:
-            self._details.update("No sessions found in ~/.codex/sessions")
 
     async def _reload_sessions(self) -> None:
         root_path = None if self._sessions_root is None else Path(self._sessions_root)
@@ -142,16 +152,6 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
     def on_data_table_row_highlighted(self, event: DataTable.RowHighlighted) -> None:
         row_index = _row_key_to_index(event.row_key)
         self._set_active_row_index(row_index)
-        if self._show_details:
-            self._refresh_details(row_index)
-
-    def _refresh_details(self, index: int) -> None:
-        if not self._sessions:
-            return
-        session = self._sessions[min(index, len(self._sessions) - 1)]
-        detail = _render_session_detail(session, self._extra_args)
-        self._details.update(detail)
-        self._details.display = True
 
     def action_resume(self) -> None:
         session = self._current_session()
@@ -170,8 +170,6 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
         if self._sessions:
             self._table.move_cursor(row=0, column=0)
             self._set_active_row_index(0)
-            if self._show_details:
-                self._refresh_details(0)
 
     def action_quit(self) -> None:
         self.exit(None)
@@ -182,7 +180,7 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
         self._extra_args = result
         session = self._current_session()
         if session and self._show_details:
-            self._details.update(_render_session_detail(session, self._extra_args))
+            self._open_info_dialog(session)
 
     def _current_session(self) -> Optional[Session]:
         if not self._sessions:
@@ -194,15 +192,21 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
 
     def _set_active_row_index(self, index: Optional[int]) -> None:
         self._active_row_index = index
-        if index is None and self._details:
-            self._details.display = False
 
     def action_toggle_info(self) -> None:
         self._show_details = not self._show_details
-        if self._show_details and self._current_session():
-            self._refresh_details(self._active_row_index or 0)
+        session = self._current_session()
+        if self._show_details and session:
+            self._open_info_dialog(session)
         else:
-            self._details.display = False
+            self._show_details = False
+
+    def _open_info_dialog(self, session: Session) -> None:
+        panel = _render_session_detail(session, self._extra_args)
+        self.push_screen(InfoModal(panel), self._dismiss_info)
+
+    def _dismiss_info(self, _: Optional[None]) -> None:
+        self._show_details = False
 
 
 def _format_dt(dt_value: datetime) -> str:
