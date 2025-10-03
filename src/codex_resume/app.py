@@ -328,14 +328,14 @@ def _render_session_detail(session: Session, extra_args: Iterable[str]) -> Panel
     if session.last_event_at:
         table.add_row("Last Event", f"{_format_verbose_dt(session.last_event_at)} ({_format_relative(session.last_event_at)})")
     if session.cwd:
-        table.add_row("Working Dir", session.cwd)
+        table.add_row("Working Dir", _shorten_cwd(session.cwd, full=True))
     if session.cli_version:
         table.add_row("CLI Version", session.cli_version)
     if session.originator:
         table.add_row("Originator", session.originator)
     extras = " ".join(shlex.quote(arg) for arg in extra_args) or "(none)"
     table.add_row("Extra Args", extras)
-    table.add_row("Log File", str(session.path))
+    table.add_row("Log File", _format_full_path(session.path))
     table.add_row("Events", str(session.total_events))
 
     if session.preview:
@@ -387,19 +387,26 @@ def _format_relative(dt_value: datetime) -> str:
     return f"{years}y ago"
 
 
+def _format_full_path(path_value: Optional[str | Path]) -> str:
+    if path_value is None:
+        return "-"
+    text = str(path_value)
+    try:
+        home = str(Path.home())
+    except RuntimeError:
+        home = None
+    if home and text.startswith(home):
+        text = "~" + text[len(home) :]
+    return text
+
+
 def _shorten_cwd(cwd: Optional[str], full: bool = False) -> str:
     if not cwd:
         return "-"
-    path = Path(cwd)
-    display = str(path)
-    try:
-        home = Path.home()
-        if display.startswith(str(home)):
-            display = "~" + display[len(str(home)) :]
-    except RuntimeError:
-        pass
+    display = _format_full_path(cwd)
     if full:
         return display
+    path = Path(cwd)
     candidate = path.name or str(path)
     if len(candidate) <= 18:
         return candidate
