@@ -71,6 +71,7 @@ class InfoModal(ModalScreen[None]):
 
     def on_key(self, event: Key) -> None:
         if event.key.lower() in {"escape", "enter", "q", "i"}:
+            event.stop()
             self.dismiss(None)
 
 class CodexResumeApp(App[Optional[ResumeChoice]]):
