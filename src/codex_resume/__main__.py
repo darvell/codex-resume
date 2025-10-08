@@ -22,26 +22,61 @@ STATUS_SYMBOLS = {
 }
 
 
-def _format_status_line(prefix: str, status_map: Dict[str, str], lock: threading.Lock) -> str:
+def _format_status_line(
+    prefix: str, status_map: Dict[str, str], lock: threading.Lock, remote_count: int, remote_targets: set
+) -> str:
+    import shutil
+
     with lock:
         items = list(status_map.items())
+
     segments = []
     for name, state in items:
-        symbol = STATUS_SYMBOLS.get(state, state)
-        segments.append(f"({name}: {symbol})")
+        # Check if this is a remotes entry
+        if name.startswith("remotes ("):
+            # Count how many remotes are done
+            done_count = sum(1 for t in remote_targets if status_map.get(t) == "done")
+            total_count = remote_count
+            symbol = STATUS_SYMBOLS.get(state, state)
+            segments.append(f"(remotes: {done_count}/{total_count} {symbol})")
+        elif name not in remote_targets:
+            # Only show non-remote entries (like "local")
+            symbol = STATUS_SYMBOLS.get(state, state)
+            segments.append(f"({name}: {symbol})")
+
     status_text = " ".join(segments)
-    return f"\r{prefix} Reading your codex history... {status_text}"
+    full_line = f"\r{prefix} Reading your codex history... {status_text}"
+
+    # Crop to terminal width
+    try:
+        terminal_width = shutil.get_terminal_size().columns
+    except (AttributeError, ValueError):
+        terminal_width = 80
+
+    if len(full_line) > terminal_width:
+        # Keep the prefix and crop the status text
+        available = terminal_width - len(f"\r{prefix} Reading your codex history... ") - 3  # 3 for "..."
+        if available > 0:
+            full_line = f"\r{prefix} Reading your codex history... {status_text[:available]}..."
+        else:
+            full_line = full_line[:terminal_width]
+
+    return full_line
 
 
-def _spinner_worker(status_map: Dict[str, str], lock: threading.Lock, stop_event: threading.Event) -> None:
+def _spinner_worker(
+    status_map: Dict[str, str], lock: threading.Lock, stop_event: threading.Event, remote_count: int, remote_targets: set
+) -> None:
     idx = 0
     while not stop_event.is_set():
-        line = _format_status_line(SPINNER_FRAMES[idx % len(SPINNER_FRAMES)], status_map, lock)
+        line = _format_status_line(
+            SPINNER_FRAMES[idx % len(SPINNER_FRAMES)], status_map, lock, remote_count, remote_targets
+        )
         print(line, end="", flush=True)
         idx += 1
         if stop_event.wait(0.1):
             break
-    final_line = _format_status_line("✔", status_map, lock)
+    final_line = _format_status_line("✔", status_map, lock, remote_count, remote_targets)
     print(final_line, end="", flush=True)
 
 
@@ -107,19 +142,41 @@ def main(argv: Optional[List[str]] = None) -> int:
         with lock:
             status_map[name] = initial
 
+    remote_targets = {remote.target for remote in config.remote_servers}
+
     def _progress(source: str, state: str) -> None:
         with lock:
-            status_map[source] = state
+            # Map individual remote targets to the consolidated "remotes (N)" entry
+            if source in remote_targets:
+                remotes_key = f"remotes ({len(config.remote_servers)})"
+                # Only update to "done" if all remotes are done
+                if state == "done":
+                    # Count how many remotes are done
+                    done_count = sum(1 for t in remote_targets if status_map.get(t) == "done")
+                    if done_count + 1 >= len(remote_targets):
+                        status_map[remotes_key] = "done"
+                    else:
+                        status_map[remotes_key] = "running"
+                elif state == "error":
+                    # If any remote fails, keep showing as running unless all are done/error
+                    if status_map.get(remotes_key) != "done":
+                        status_map[remotes_key] = "running"
+                else:
+                    status_map[remotes_key] = state
+                # Track individual remote status for counting
+                status_map[source] = state
+            else:
+                status_map[source] = state
 
     sources: List[str] = ["local"]
-    for remote in config.remote_servers:
-        sources.append(remote.target)
+    if config.remote_servers:
+        sources.append(f"remotes ({len(config.remote_servers)})")
     for name in sources:
         _register_source(name)
 
     spinner_thread = threading.Thread(
         target=_spinner_worker,
-        args=(status_map, lock, spinner_stop),
+        args=(status_map, lock, spinner_stop, len(config.remote_servers), remote_targets),
         daemon=True,
     )
     spinner_thread.start()
@@ -151,7 +208,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     if isinstance(result, ResumeChoice):
         if config.use_npx_codex:
-            base = ["npx", "--yes", "@openai/codex@latest"]
+            base = ["npx", "--yes", f"@openai/codex@{config.npx_version}"]
         else:
             base = ["codex"]
         command = [*base, *result.extra_args, "resume", result.session.id]

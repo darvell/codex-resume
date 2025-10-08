@@ -13,9 +13,9 @@ from rich.table import Table
 from rich.text import Text
 from textual.app import App, ComposeResult
 from textual.binding import Binding
-from textual.containers import Vertical
+from textual.containers import Horizontal, Vertical
 from textual.screen import ModalScreen
-from textual.widgets import Button, Checkbox, DataTable, Footer, Header, Input, Static
+from textual.widgets import Button, Checkbox, DataTable, Footer, Header, Input, Select, Static
 from textual.events import Key
 from textual.widgets._data_table import ColumnKey
 from textual.timer import Timer
@@ -49,59 +49,20 @@ class ResumeChoice:
     extra_args: List[str]
 
 
-@dataclass
-class ExtraArgsResult:
-    args: List[str]
-    persist: bool
-
-
-class ExtraArgsScreen(ModalScreen[Optional[ExtraArgsResult]]):
-    """Modal prompt that lets the user edit extra args."""
-
-    def __init__(self, initial: List[str]) -> None:
-        super().__init__()
-        self._initial = " ".join(shlex.quote(arg) for arg in initial)
-        self._input: Input
-
-    def compose(self) -> ComposeResult:  # type: ignore[override]
-        yield Static("Enter additional CLI arguments (leave blank for none):")
-        self._input = Input(placeholder="--flag value", value=self._initial, id="extra-args-input")
-        yield self._input
-        yield Button(label="Save", id="save", variant="primary")
-        yield Button(label="Save & Apply As Default", id="save-default", variant="success")
-        yield Button(label="Cancel", id="cancel")
-
-    def on_mount(self) -> None:
-        self._input.focus()
-        self._input.cursor_position = len(self._input.value)
-
-    def on_button_pressed(self, event: Button.Pressed) -> None:
-        if event.button.id == "save":
-            self._commit(persist=False)
-        elif event.button.id == "save-default":
-            self._commit(persist=True)
-        else:
-            self.dismiss(None)
-
-    def on_input_submitted(self, event: Input.Submitted) -> None:
-        self._commit(persist=False)
-
-    def _commit(self, *, persist: bool) -> None:
-        text = self._input.value.strip()
-        self.dismiss(ExtraArgsResult(args=_parse_extra_args(text), persist=persist))
-
-
 class OptionsScreen(ModalScreen[Optional[Config]]):
     """Modal UI for toggling configuration flags and remote servers."""
 
-    def __init__(self, config: Config) -> None:
+    def __init__(self, config: Config, extra_args: List[str]) -> None:
         super().__init__()
         self._original = config
+        self._extra_args = list(extra_args)
         self._remotes: List[RemoteServerConfig] = [
             RemoteServerConfig(target=remote.target, sessions_dir=remote.sessions_dir)
             for remote in config.remote_servers
         ]
         self._use_npx_checkbox: Checkbox
+        self._npx_version_select: Select[str]
+        self._extra_args_input: Input
         self._target_input: Input
         self._sessions_input: Input
         self._remote_table: DataTable
@@ -109,47 +70,74 @@ class OptionsScreen(ModalScreen[Optional[Config]]):
         self._remove_button: Button
 
     def compose(self) -> ComposeResult:  # type: ignore[override]
+        from textual.widgets import Select
+
         with Vertical(classes="modal-panel"):
             yield Static("Configuration", classes="options-title")
-            self._use_npx_checkbox = Checkbox(
-                "Use npx @openai/codex@latest when resuming", value=self._original.use_npx_codex
-            )
-            yield self._use_npx_checkbox
 
-            yield Static("Remote servers:", classes="options-section")
-            self._remote_table = DataTable(id="remote-table")
-            self._remote_table.cursor_type = "row"
-            self._remote_table.zebra_stripes = True
-            self._remote_table.add_column("Target", key="target")
-            self._remote_table.add_column("Sessions Dir", key="dir")
-            yield self._remote_table
-            self._populate_remote_table()
+            with Horizontal(classes="config-columns"):
+                # Left column: NPX settings and extra args
+                with Vertical(classes="config-column"):
+                    yield Static("NPX Settings", classes="column-header")
+                    self._use_npx_checkbox = Checkbox(
+                        "Use npx @openai/codex", value=self._original.use_npx_codex
+                    )
+                    yield self._use_npx_checkbox
 
-            yield Static("Add remote server (user@host):", classes="options-section")
-            self._target_input = Input(placeholder="root@example.com", id="remote-target")
-            yield self._target_input
-            self._sessions_input = Input(
-                placeholder="Sessions dir (optional, default ~/.codex/sessions)",
-                id="remote-sessions",
-            )
-            yield self._sessions_input
-            yield Button(label="Add Remote", id="add-remote", variant="primary")
-            self._remove_button = Button(label="Remove Selected Remote", id="remove-selected")
-            yield self._remove_button
-            self._update_remove_button_state()
+                    self._npx_version_select = Select[str](
+                        options=[
+                            ("@latest", "latest"),
+                            ("@alpha", "alpha"),
+                        ],
+                        value=self._original.npx_version,
+                        allow_blank=False,
+                        id="npx-version-select",
+                    )
+                    yield self._npx_version_select
+
+                    yield Static("Extra CLI Arguments", classes="column-header extra-args-header")
+                    extra_args_value = " ".join(shlex.quote(arg) for arg in self._extra_args)
+                    self._extra_args_input = Input(
+                        placeholder="--flag value",
+                        value=extra_args_value,
+                        id="extra-args-input"
+                    )
+                    yield self._extra_args_input
+
+                # Right column: Remote servers
+                with Vertical(classes="config-column"):
+                    yield Static("Remote Servers", classes="column-header")
+                    self._remote_table = DataTable(id="remote-table")
+                    self._remote_table.cursor_type = "row"
+                    self._remote_table.zebra_stripes = True
+                    self._remote_table.add_column("Target", key="target")
+                    self._remote_table.add_column("Dir", key="dir")
+                    yield self._remote_table
+                    self._populate_remote_table()
+
+                    self._target_input = Input(placeholder="user@host", id="remote-target")
+                    yield self._target_input
+                    self._sessions_input = Input(
+                        placeholder="~/.codex/sessions",
+                        id="remote-sessions",
+                    )
+                    yield self._sessions_input
+
+                    with Horizontal(classes="remote-buttons"):
+                        yield Button(label="Add", id="add-remote", variant="primary")
+                        self._remove_button = Button(label="Remove", id="remove-selected")
+                        yield self._remove_button
+                    self._update_remove_button_state()
 
             self._status = Static("", classes="options-status")
             yield self._status
 
-            yield Button(label="Save", id="save", variant="success")
-            yield Button(label="Cancel", id="cancel")
+            with Horizontal(classes="action-buttons"):
+                yield Button(label="Save", id="save", variant="success")
+                yield Button(label="Cancel", id="cancel")
 
     def on_mount(self) -> None:
-        if self._remotes:
-            self._populate_remote_table()
-            self._remote_table.focus()
-        else:
-            self._target_input.focus()
+        self._use_npx_checkbox.focus()
         self._update_remove_button_state()
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
@@ -189,12 +177,8 @@ class OptionsScreen(ModalScreen[Optional[Config]]):
         if coordinate is None:
             self._status.update("[yellow]Select a remote to remove.[/yellow]")
             return
-        row_key = self._remote_table.row_keys[coordinate.row]
-        try:
-            index = int(row_key)
-        except (TypeError, ValueError):
-            self._status.update("[red]Unable to determine selected remote.[/red]")
-            return
+        # Use the row coordinate directly as the index
+        index = coordinate.row
         if index < 0 or index >= len(self._remotes):
             self._status.update("[red]Selected remote is out of range.[/red]")
             return
@@ -208,13 +192,17 @@ class OptionsScreen(ModalScreen[Optional[Config]]):
             self._target_input.focus()
 
     def _save(self) -> None:
+        npx_version = self._npx_version_select.value or "latest"
+        extra_args_text = self._extra_args_input.value.strip()
+        extra_args = _parse_extra_args(extra_args_text)
         new_config = Config(
-            default_extra_args=list(self._original.default_extra_args),
+            default_extra_args=list(extra_args),
             remote_servers=[
                 RemoteServerConfig(target=remote.target, sessions_dir=remote.sessions_dir)
                 for remote in self._remotes
             ],
             use_npx_codex=self._use_npx_checkbox.value,
+            npx_version=npx_version,
         )
         self.dismiss(new_config)
 
@@ -268,14 +256,21 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
         width: 100%;
     }
 
+    #sessions {
+        border: round $accent;
+    }
+
     #preview {
-        padding: 1 1;
+        padding: 1;
         height: auto;
+        min-height: 8;
         border-top: solid $accent;
+        overflow-y: auto;
     }
 
     Input {
-        border: tall $accent-lighten-2;
+        border: round $accent-lighten-2;
+        margin: 0;
     }
 
     .info-footer {
@@ -286,35 +281,124 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
     .modal-panel {
         background: $panel;
         border: round $accent;
-        padding: 1 2;
-        min-width: 60;
+        padding: 1;
+        min-width: 70;
+        max-width: 95;
     }
 
     .options-title {
-        padding-bottom: 1;
+        padding: 0;
+        margin: 0;
         text-style: bold;
+        color: $accent;
+        text-align: center;
     }
 
-    .options-section {
-        padding: 1 0 0 0;
+    .config-columns {
+        width: 100%;
+        height: auto;
+        margin: 0;
+    }
+
+    .config-column {
+        width: 1fr;
+        height: auto;
+        padding: 0 1;
+    }
+
+    .config-column:first-child {
+        padding-left: 0;
+        border-right: solid $panel-lighten-1;
+    }
+
+    .config-column:last-child {
+        padding-right: 0;
+    }
+
+    .column-header {
+        text-style: bold;
+        color: $text-muted;
+        padding: 0;
+        margin: 0;
+    }
+
+    .extra-args-header {
+        margin-top: 0;
+        padding-top: 0;
+        border-top: none;
     }
 
     .options-status {
-        padding: 1 0 0 0;
+        padding: 0;
         color: $text-muted;
+        min-height: 0;
+        margin: 0;
+        height: auto;
+    }
+
+    #npx-version-select {
+        margin: 0;
+        border: round $accent-lighten-2;
     }
 
     #remote-table {
         height: auto;
-        margin: 1 0;
-        border: tall $accent;
+        max-height: 10;
+        margin: 0;
+        border: round $accent;
+    }
+
+    Checkbox {
+        margin: 0;
+    }
+
+    Button {
+        margin: 0 1 0 0;
+    }
+
+    #save {
+        background: $success;
+    }
+
+    #cancel {
+        background: $error 30%;
+    }
+
+    .remote-buttons {
+        width: 100%;
+        height: auto;
+        margin: 0;
+        padding: 0;
+    }
+
+    .remote-buttons > Button {
+        margin: 0 1 0 0;
+    }
+
+    .remote-buttons > Button:last-child {
+        margin-right: 0;
+    }
+
+    .action-buttons {
+        width: 100%;
+        height: auto;
+        margin: 0;
+        padding: 0;
+        border-top: none;
+    }
+
+    .action-buttons > Button {
+        margin: 0 1 0 0;
+    }
+
+    .action-buttons > Button:last-child {
+        margin-right: 0;
     }
     """
 
     BINDINGS = [
         Binding("enter", "resume", "Resume"),
         Binding("r", "resume", "Resume"),
-        Binding("e", "edit_extra", "Extra Args"),
         Binding("o", "open_options", "Options"),
         Binding("i", "toggle_info", "Info Panel"),
         Binding("x", "toggle_hidden", "Hide"),
@@ -384,7 +468,7 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
         if self._config.remote_servers:
             message = "Scanning local & remote sessions…"
         if self._config.use_npx_codex:
-            message += "\nUsing npx @openai/codex@latest"
+            message += f"\nUsing npx @openai/codex@{self._config.npx_version}"
         self._start_loading_animation(message)
         try:
             sessions = await asyncio.to_thread(
@@ -408,11 +492,53 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
         self._apply_sessions(sessions)
 
     def _apply_sessions(self, sessions: List[Session]) -> None:
+        import shutil
+
         self._sessions = sessions
         self._session_index = {session.storage_key: idx for idx, session in enumerate(self._sessions)}
         self._hidden_sessions.intersection_update(self._session_index.keys())
         if not hasattr(self, "_table"):
             return
+
+        # Get terminal width
+        try:
+            terminal_width = shutil.get_terminal_size().columns
+        except (AttributeError, ValueError):
+            terminal_width = 80
+
+        # Calculate max dir width needed
+        max_dir_width = 0
+        for session in self._sessions:
+            dir_text = _format_session_dir(session)
+            max_dir_width = max(max_dir_width, len(dir_text))
+
+        # Add extra buffer for remote host prefix and formatting
+        max_dir_width += 2
+
+        # Set a reasonable max (don't let it take up too much space)
+        max_dir_width = min(max_dir_width, 45)
+        max_dir_width = max(max_dir_width, 10)  # Minimum width for "Dir" header
+
+        # Calculate summary width based on remaining space
+        # Account for: Last (12) + ID (8) + Dir (calculated) + borders/padding (~12)
+        last_width = 12
+        id_width = 8
+        padding_borders = 12  # Approximate space for table borders, padding, separators
+
+        summary_width = terminal_width - last_width - id_width - max_dir_width - padding_borders
+        summary_width = max(summary_width, 20)  # Minimum 20 chars for summary
+        summary_width = min(summary_width, 100)  # Maximum 100 chars
+
+        # Update column widths - all fixed now
+        dir_column = self._get_column("dir")
+        summary_column = self._get_column("summary")
+        if dir_column:
+            dir_column.width = max_dir_width
+            dir_column.auto_width = False
+        if summary_column:
+            summary_column.width = summary_width
+            summary_column.auto_width = False
+
         self._table.clear()
         for index, session in enumerate(self._sessions):
             summary_text = session.summary
@@ -421,7 +547,7 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
             self._table.add_row(
                 _format_relative(session.last_event_at or session.started_at),
                 session.id[:8],
-                _truncate(summary_text, 60),
+                summary_text,
                 _format_session_dir(session),
                 key=str(index),
             )
@@ -445,11 +571,8 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
             return
         self.exit(ResumeChoice(session=session, extra_args=list(self._extra_args)))
 
-    def action_edit_extra(self) -> None:
-        self.push_screen(ExtraArgsScreen(self._extra_args), self._handle_extra_result)
-
     def action_open_options(self) -> None:
-        self.push_screen(OptionsScreen(self._config), self._handle_options_result)
+        self.push_screen(OptionsScreen(self._config, self._extra_args), self._handle_options_result)
 
     def action_refresh(self) -> None:
         self.call_after_refresh(self._async_refresh)
@@ -464,26 +587,25 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
     def action_quit(self) -> None:
         self.exit(None)
 
-    def _handle_extra_result(self, result: Optional[ExtraArgsResult]) -> None:
-        if result is None:
-            return
-        self._extra_args = result.args
-        if result.persist:
-            self._config.default_extra_args = list(result.args)
-            save_config(self._config)
-        session = self._current_session()
-        if session and self._show_details:
-            self._open_info_dialog(session)
-        elif self._active_row_index is not None:
-            self._update_preview(self._active_row_index)
-
     def _handle_options_result(self, result: Optional[Config]) -> None:
         if result is None:
             return
+
+        # Check if remote servers changed
+        old_remotes = [(r.target, r.sessions_dir) for r in self._config.remote_servers]
+        new_remotes = [(r.target, r.sessions_dir) for r in result.remote_servers]
+        remotes_changed = old_remotes != new_remotes
+
         self._config.use_npx_codex = result.use_npx_codex
+        self._config.npx_version = result.npx_version
         self._config.remote_servers = result.remote_servers
+        self._config.default_extra_args = result.default_extra_args
+        self._extra_args = list(result.default_extra_args)
         save_config(self._config)
-        self.call_after_refresh(self._async_refresh)
+
+        # Only reload sessions if remote servers changed
+        if remotes_changed:
+            self.call_after_refresh(self._async_refresh)
 
     def _current_session(self) -> Optional[Session]:
         if self._loading_active:
@@ -532,20 +654,36 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
         if session.storage_key in self._hidden_sessions:
             self._preview.update("Session hidden. Press X to reveal.")
             return
-        lines: List[str] = []
-        lines.append(f"Summary: {session.summary}")
+
+        # Use a table grid for better layout
+        table = Table.grid(padding=(0, 1))
+        table.add_column(justify="right", style="cyan bold", width=14)
+        table.add_column()
+
+        # Core info
+        table.add_row("Summary", escape(session.summary))
+        table.add_row("Session ID", session.id)
+
         last_time = _format_relative(session.last_event_at or session.started_at)
-        lines.append(f"Last activity {last_time}")
+        table.add_row("Last Activity", last_time)
+
         dir_display = _format_session_dir(session, full=True)
-        if dir_display:
-            lines.append(f"Directory {dir_display}")
+        if dir_display and dir_display != "-":
+            table.add_row("Directory", dir_display)
+
+        if session.remote_host:
+            table.add_row("Remote Host", session.remote_host)
+
+        # Preview messages
         if session.preview:
-            for role, snippet in session.preview[:2]:
+            for idx, (role, snippet) in enumerate(session.preview[:4]):
                 label = (role or "msg").capitalize()
-                lines.append(f"{label}: {_truncate(snippet, 70)}")
+                table.add_row(f"{label} {idx + 1}" if len(session.preview) > 2 else label, snippet)
+
         if session.truncated:
-            lines.append("Log sample is limited to the first 4KB")
-        self._preview.update("\n".join(lines))
+            table.add_row("Note", "[dim]Log sample limited to first 4KB[/dim]")
+
+        self._preview.update(table)
 
     def _open_info_dialog(self, session: Session) -> None:
         if self._loading_active:
@@ -569,17 +707,17 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
         self._table.clear(columns=True)
         self._column_keys = {
             "last": self._table.add_column("Last", width=12),
-            "id": self._table.add_column("ID", width=6),
+            "id": self._table.add_column("ID", width=8),
             "summary": self._table.add_column("Summary"),
-            "dir": self._table.add_column("Dir"),
+            "dir": self._table.add_column("Dir", width=8),
         }
+        # Fixed width columns (Last, ID, Dir - Dir will be adjusted dynamically)
         for name in ("last", "id"):
             column = self._get_column(name)
             if column:
                 column.auto_width = False
-        dir_column = self._get_column("dir")
-        if dir_column:
-            dir_column.auto_width = True
+        # Summary column will stretch to fill (set in _apply_sessions)
+        # Dir column width will be calculated dynamically based on content
 
     def _get_column(self, name: str):
         key = self._column_keys.get(name)
@@ -598,7 +736,7 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
             values = (
                 _format_relative(session.last_event_at or session.started_at),
                 session.id[:8],
-                _truncate(session.summary, 60),
+                session.summary,  # Don't truncate, let it fill available space
                 _format_session_dir(session),
             )
         for column_name, value in zip(("last", "id", "summary", "dir"), values):
@@ -632,8 +770,6 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
             self._open_info_dialog(self._current_session())
 
     def _start_loading_animation(self, message: str) -> None:
-        if self._config.use_npx_codex:
-            message += "\nUsing npx @openai/codex@latest"
         self._loading_message = escape(message)
         self._loading_active = True
         self._loading_frame_index = 0

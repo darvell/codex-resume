@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "codex-resume"
-version = "0.4.1"
+version = "0.4.2"
 description = "Textual-based TUI to browse and resume Codex CLI sessions"
 readme = "README.md"
 authors = [{name = "darvell"}]

@@ -52,6 +52,7 @@ class Config:
     default_extra_args: List[str] = field(default_factory=list)
     remote_servers: List[RemoteServerConfig] = field(default_factory=list)
     use_npx_codex: bool = False
+    npx_version: str = "latest"  # "latest" or "alpha"
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "Config":
@@ -68,13 +69,22 @@ class Config:
                 except ValueError:
                     continue
         use_npx = bool(data.get("use_npx_codex", False))
-        return cls(default_extra_args=stringified, remote_servers=remote_configs, use_npx_codex=use_npx)
+        npx_version = str(data.get("npx_version", "latest"))
+        if npx_version not in ("latest", "alpha"):
+            npx_version = "latest"
+        return cls(
+            default_extra_args=stringified,
+            remote_servers=remote_configs,
+            use_npx_codex=use_npx,
+            npx_version=npx_version,
+        )
 
     def to_dict(self) -> Dict[str, Any]:
         return {
             "default_extra_args": list(self.default_extra_args),
             "remote_servers": [remote.to_dict() for remote in self.remote_servers],
             "use_npx_codex": self.use_npx_codex,
+            "npx_version": self.npx_version,
         }
 
 
