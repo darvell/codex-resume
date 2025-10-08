@@ -54,8 +54,6 @@ pip install codex-resume
 - **Customise once, reuse forever** – edit extra arguments (`E`) and save them as the global default, or toggle “always use `npx codex@latest`” in the options panel (`O`).
 - **Readable paths** – directories are shown relative to `~` when possible, so you can tell at a glance where a session ran.
 
-![Options modal with remote servers](docs/options_modal.png)
-
 ## Usage
 
 ```bash
