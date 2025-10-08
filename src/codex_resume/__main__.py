@@ -151,7 +151,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     if isinstance(result, ResumeChoice):
         if config.use_npx_codex:
-            base = ["npx", "--yes", "codex@latest"]
+            base = ["npx", "--yes", "@openai/codex@latest"]
         else:
             base = ["codex"]
         command = [*base, *result.extra_args, "resume", result.session.id]

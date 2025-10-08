@@ -112,7 +112,7 @@ class OptionsScreen(ModalScreen[Optional[Config]]):
         with Vertical(classes="modal-panel"):
             yield Static("Configuration", classes="options-title")
             self._use_npx_checkbox = Checkbox(
-                "Use npx codex@latest when resuming", value=self._original.use_npx_codex
+                "Use npx @openai/codex@latest when resuming", value=self._original.use_npx_codex
             )
             yield self._use_npx_checkbox
 
@@ -384,7 +384,7 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
         if self._config.remote_servers:
             message = "Scanning local & remote sessions…"
         if self._config.use_npx_codex:
-            message += "\nUsing npx codex@latest"
+            message += "\nUsing npx @openai/codex@latest"
         self._start_loading_animation(message)
         try:
             sessions = await asyncio.to_thread(
@@ -633,7 +633,7 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
 
     def _start_loading_animation(self, message: str) -> None:
         if self._config.use_npx_codex:
-            message += "\nUsing npx codex@latest"
+            message += "\nUsing npx @openai/codex@latest"
         self._loading_message = escape(message)
         self._loading_active = True
         self._loading_frame_index = 0
