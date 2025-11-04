@@ -11,15 +11,8 @@ from typing import Dict, List, Optional
 
 from . import __version__
 from .config import CONFIG_PATH, load_config, save_config
+from .constants import DEFAULT_MAX_AGE_DAYS, SPINNER_FRAMES, STATUS_SYMBOLS
 from .sessions import discover_sessions
-
-SPINNER_FRAMES = ["⠋", "⠙", "⠚", "⠞", "⠖", "⠦", "⠴", "⠲", "⠳", "⠓"]
-STATUS_SYMBOLS = {
-    "pending": "…",
-    "running": "…",
-    "done": "✓",
-    "error": "✗",
-}
 
 
 def _format_status_line(
@@ -185,7 +178,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         initial_sessions = discover_sessions(
             root=args.sessions_root,
             remotes=config.remote_servers,
-            max_age_days=7,
+            max_age_days=DEFAULT_MAX_AGE_DAYS,
             progress=_progress,
         )
         _progress("local", "done")

@@ -21,22 +21,43 @@ from textual.widgets._data_table import ColumnKey
 from textual.timer import Timer
 
 from .config import Config, RemoteServerConfig, save_config
+from .constants import (
+    COLOR_CYAN,
+    COLOR_GREEN,
+    COLOR_MAGENTA,
+    COLOR_MUTED,
+    COLOR_RED,
+    COLOR_YELLOW,
+    CWD_MAX_LENGTH,
+    CWD_TRUNCATE_LENGTH,
+    DEFAULT_MAX_AGE_DAYS,
+    DIR_WIDTH_BUFFER,
+    HIDDEN_MARKER,
+    HIDDEN_STATUS,
+    ID_COLUMN_WIDTH,
+    LAST_COLUMN_WIDTH,
+    LOADING_ANIMATION_INTERVAL,
+    LOADING_SPINNER_FRAMES,
+    MAX_DIR_WIDTH,
+    MAX_SUMMARY_WIDTH,
+    MIN_DIR_WIDTH,
+    MIN_SUMMARY_WIDTH,
+    RELATIVE_TIME_UPDATE_INTERVAL,
+    TABLE_PADDING_BORDERS,
+)
 from .sessions import Session, discover_sessions
 
 
 def _generate_loading_frames() -> List[str]:
-    template = [
-        "   {0}   ",
-        " {7}   {1} ",
-        "{6}     {2}",
-        " {5}   {3} ",
-        "   {4}   ",
-    ]
+    """Generate elegant loading animation frames."""
     frames: List[str] = []
-    for active in range(8):
-        chars = ["o"] * 8
-        chars[active] = "@"
-        frames.append("\n".join(row.format(*chars) for row in template))
+    for spinner in LOADING_SPINNER_FRAMES:
+        frame_lines = [
+            "    ╔══════════════╗",
+            f"    ║  {spinner}  Loading  {spinner}  ║",
+            "    ╚══════════════╝",
+        ]
+        frames.append("\n".join(frame_lines))
     return frames
 
 
@@ -248,6 +269,7 @@ class InfoModal(ModalScreen[None]):
 class CodexResumeApp(App[Optional[ResumeChoice]]):
     TITLE = "codex-resume"
     CSS = """
+    /* Main layout */
     #main {
         height: 1fr;
     }
@@ -256,48 +278,67 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
         width: 100%;
     }
 
+    /* Sessions table - enhanced styling */
     #sessions {
-        border: round $accent;
+        border: heavy $accent;
+        background: $surface;
     }
 
+    #sessions:focus {
+        border: heavy $accent-lighten-1;
+    }
+
+    /* Preview panel - more elegant */
     #preview {
-        padding: 1;
+        padding: 1 2;
         height: auto;
         min-height: 8;
-        border-top: solid $accent;
+        border-top: double $accent;
         overflow-y: auto;
+        background: $panel;
     }
 
+    /* Input fields */
     Input {
         border: round $accent-lighten-2;
         margin: 0;
     }
 
+    Input:focus {
+        border: round $accent;
+    }
+
+    /* Info modal footer */
     .info-footer {
         padding: 1 2;
         color: $text-muted;
+        text-align: center;
     }
 
+    /* Modal panel - enhanced */
     .modal-panel {
         background: $panel;
-        border: round $accent;
-        padding: 1;
+        border: heavy $accent;
+        padding: 1 2;
         min-width: 70;
         max-width: 95;
     }
 
+    /* Options title - centered and prominent */
     .options-title {
-        padding: 0;
-        margin: 0;
+        padding: 1 0;
+        margin: 0 0 1 0;
         text-style: bold;
         color: $accent;
         text-align: center;
+        border-bottom: solid $accent-lighten-2;
     }
 
+    /* Config columns layout */
     .config-columns {
         width: 100%;
         height: auto;
-        margin: 0;
+        margin: 1 0;
     }
 
     .config-column {
@@ -315,55 +356,78 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
         padding-right: 0;
     }
 
+    /* Column headers */
     .column-header {
         text-style: bold;
-        color: $text-muted;
-        padding: 0;
-        margin: 0;
+        color: $accent-lighten-1;
+        padding: 0 0 1 0;
+        margin: 1 0 0 0;
+        border-bottom: solid $panel-lighten-1;
     }
 
     .extra-args-header {
-        margin-top: 0;
+        margin-top: 1;
         padding-top: 0;
-        border-top: none;
     }
 
+    /* Options status line */
     .options-status {
-        padding: 0;
+        padding: 1 0 0 0;
         color: $text-muted;
-        min-height: 0;
+        min-height: 1;
         margin: 0;
         height: auto;
+        border-top: solid $panel-lighten-1;
     }
 
+    /* NPX version selector */
     #npx-version-select {
-        margin: 0;
+        margin: 0 0 1 0;
         border: round $accent-lighten-2;
     }
 
+    /* Remote table styling */
     #remote-table {
         height: auto;
         max-height: 10;
-        margin: 0;
+        margin: 0 0 1 0;
         border: round $accent;
     }
 
+    /* Checkbox styling */
     Checkbox {
-        margin: 0;
+        margin: 0 0 1 0;
     }
 
+    /* Button spacing */
     Button {
         margin: 0 1 0 0;
+        min-width: 12;
+    }
+
+    Button:hover {
+        text-style: bold;
     }
 
     #save {
         background: $success;
+        border: round $success-lighten-1;
+    }
+
+    #save:hover {
+        background: $success-lighten-1;
     }
 
     #cancel {
         background: $error 30%;
+        border: round $error;
     }
 
+    #cancel:hover {
+        background: $error 40%;
+    }
+
+    /* Remote buttons container */
     .remote-buttons {
         width: 100%;
         height: auto;
@@ -379,12 +443,13 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
         margin-right: 0;
     }
 
+    /* Action buttons container */
     .action-buttons {
         width: 100%;
         height: auto;
-        margin: 0;
-        padding: 0;
-        border-top: none;
+        margin: 1 0 0 0;
+        padding: 1 0 0 0;
+        border-top: solid $accent-lighten-2;
     }
 
     .action-buttons > Button {
@@ -393,6 +458,17 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
 
     .action-buttons > Button:last-child {
         margin-right: 0;
+    }
+
+    /* Header and Footer enhancements */
+    Header {
+        background: $panel;
+        border-bottom: double $accent;
+    }
+
+    Footer {
+        background: $panel;
+        border-top: double $accent;
     }
     """
 
@@ -419,7 +495,7 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
         self._sessions_root = (None if sessions_root is None else sessions_root)
         self._config = config or Config()
         self._extra_args = list(extra_args or self._config.default_extra_args)
-        self._session_window_days = 7
+        self._session_window_days = DEFAULT_MAX_AGE_DAYS
         self._sessions: List[Session] = list(initial_sessions or [])
         self._has_preloaded_sessions = initial_sessions is not None
         self._active_row_index: Optional[int] = None
@@ -433,6 +509,9 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
         self._loading_frame_index = 0
         self._loading_message = "Loading sessions…"
         self._loading_active = False
+        # Performance caching
+        self._relative_time_cache: dict[str, str] = {}
+        self._dir_format_cache: dict[str, str] = {}
 
     def compose(self) -> ComposeResult:  # type: ignore[override]
         yield Header(show_clock=False)
@@ -455,7 +534,9 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
         if self._sessions and hasattr(self, "_table"):
             self._table.focus()
             self._table.move_cursor(row=0, column=0)
-        self._relative_timer = self.set_interval(5, self._refresh_relative_times, pause=False)
+        self._relative_timer = self.set_interval(
+            RELATIVE_TIME_UPDATE_INTERVAL, self._refresh_relative_times, pause=False
+        )
 
     async def on_unmount(self) -> None:
         if self._relative_timer:
@@ -489,6 +570,9 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
             return
 
         self._stop_loading_animation()
+        # Clear caches when reloading sessions
+        self._relative_time_cache.clear()
+        self._dir_format_cache.clear()
         self._apply_sessions(sessions)
 
     def _apply_sessions(self, sessions: List[Session]) -> None:
@@ -507,27 +591,28 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
             terminal_width = 80
 
         # Calculate max dir width needed
-        max_dir_width = 0
+        max_dir_width = MIN_DIR_WIDTH
         for session in self._sessions:
             dir_text = _format_session_dir(session)
             max_dir_width = max(max_dir_width, len(dir_text))
 
         # Add extra buffer for remote host prefix and formatting
-        max_dir_width += 2
+        max_dir_width += DIR_WIDTH_BUFFER
 
         # Set a reasonable max (don't let it take up too much space)
-        max_dir_width = min(max_dir_width, 45)
-        max_dir_width = max(max_dir_width, 10)  # Minimum width for "Dir" header
+        max_dir_width = min(max_dir_width, MAX_DIR_WIDTH)
+        max_dir_width = max(max_dir_width, MIN_DIR_WIDTH)
 
         # Calculate summary width based on remaining space
-        # Account for: Last (12) + ID (8) + Dir (calculated) + borders/padding (~12)
-        last_width = 12
-        id_width = 8
-        padding_borders = 12  # Approximate space for table borders, padding, separators
-
-        summary_width = terminal_width - last_width - id_width - max_dir_width - padding_borders
-        summary_width = max(summary_width, 20)  # Minimum 20 chars for summary
-        summary_width = min(summary_width, 100)  # Maximum 100 chars
+        summary_width = (
+            terminal_width
+            - LAST_COLUMN_WIDTH
+            - ID_COLUMN_WIDTH
+            - max_dir_width
+            - TABLE_PADDING_BORDERS
+        )
+        summary_width = max(summary_width, MIN_SUMMARY_WIDTH)
+        summary_width = min(summary_width, MAX_SUMMARY_WIDTH)
 
         # Update column widths - all fixed now
         dir_column = self._get_column("dir")
@@ -655,33 +740,35 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
             self._preview.update("Session hidden. Press X to reveal.")
             return
 
-        # Use a table grid for better layout
+        # Use a styled table grid for better layout
         table = Table.grid(padding=(0, 1))
-        table.add_column(justify="right", style="cyan bold", width=14)
+        table.add_column(justify="right", style=f"{COLOR_CYAN} bold", width=14)
         table.add_column()
 
-        # Core info
-        table.add_row("Summary", escape(session.summary))
-        table.add_row("Session ID", session.id)
+        # Core info with better formatting
+        table.add_row("Summary", f"[bold]{escape(session.summary)}[/bold]")
+        table.add_row("Session ID", f"[{COLOR_MUTED}]{session.id}[/{COLOR_MUTED}]")
 
         last_time = _format_relative(session.last_event_at or session.started_at)
-        table.add_row("Last Activity", last_time)
+        table.add_row("Last Activity", f"[{COLOR_YELLOW}]{last_time}[/{COLOR_YELLOW}]")
 
         dir_display = _format_session_dir(session, full=True)
         if dir_display and dir_display != "-":
-            table.add_row("Directory", dir_display)
+            table.add_row("Directory", f"[{COLOR_CYAN}]{dir_display}[/{COLOR_CYAN}]")
 
         if session.remote_host:
-            table.add_row("Remote Host", session.remote_host)
+            table.add_row("Remote Host", f"[{COLOR_MAGENTA}]{session.remote_host}[/{COLOR_MAGENTA}]")
 
-        # Preview messages
+        # Preview messages with role-based colors
         if session.preview:
             for idx, (role, snippet) in enumerate(session.preview[:4]):
                 label = (role or "msg").capitalize()
-                table.add_row(f"{label} {idx + 1}" if len(session.preview) > 2 else label, snippet)
+                role_color = COLOR_GREEN if role == "assistant" else COLOR_CYAN
+                display_label = f"{label} {idx + 1}" if len(session.preview) > 2 else label
+                table.add_row(display_label, f"[{role_color}]{snippet}[/{role_color}]")
 
         if session.truncated:
-            table.add_row("Note", "[dim]Log sample limited to first 4KB[/dim]")
+            table.add_row("Note", f"[dim {COLOR_YELLOW}]Log sample limited to first 4KB[/dim {COLOR_YELLOW}]")
 
         self._preview.update(table)
 
@@ -704,14 +791,15 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
         self._info_modal = None
 
     def _configure_columns(self) -> None:
+        """Configure table columns with fixed widths."""
         self._table.clear(columns=True)
         self._column_keys = {
-            "last": self._table.add_column("Last", width=12),
-            "id": self._table.add_column("ID", width=8),
+            "last": self._table.add_column("Last", width=LAST_COLUMN_WIDTH),
+            "id": self._table.add_column("ID", width=ID_COLUMN_WIDTH),
             "summary": self._table.add_column("Summary"),
-            "dir": self._table.add_column("Dir", width=8),
+            "dir": self._table.add_column("Dir", width=MIN_DIR_WIDTH),
         }
-        # Fixed width columns (Last, ID, Dir - Dir will be adjusted dynamically)
+        # Fixed width columns (Last, ID)
         for name in ("last", "id"):
             column = self._get_column(name)
             if column:
@@ -726,19 +814,25 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
         return self._table.columns.get(key)
 
     def _set_row_values(self, session: Session, hidden: bool) -> None:
+        """Update row values with optional hidden marker."""
         index = self._session_index.get(session.storage_key)
         if index is None:
             return
         row_key = str(index)
+
         if hidden:
-            values = ("HIDDEN", "████████", "████████████", "████████████")
+            values = (HIDDEN_STATUS, HIDDEN_MARKER * 2, HIDDEN_MARKER * 3, HIDDEN_MARKER * 3)
         else:
+            relative_time = _format_relative(session.last_event_at or session.started_at)
+            # Cache the relative time
+            self._relative_time_cache[session.storage_key] = relative_time
             values = (
-                _format_relative(session.last_event_at or session.started_at),
-                session.id[:8],
+                relative_time,
+                session.id[:ID_COLUMN_WIDTH],
                 session.summary,  # Don't truncate, let it fill available space
                 _format_session_dir(session),
             )
+
         for column_name, value in zip(("last", "id", "summary", "dir"), values):
             column = self._get_column(column_name)
             if column is None:
@@ -750,20 +844,36 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
             self._set_row_values(session, hidden=session.storage_key in self._hidden_sessions)
 
     def _refresh_relative_times(self) -> None:
-        if self._loading_active:
+        """Refresh relative time stamps with caching for better performance."""
+        if self._loading_active or not self._sessions:
             return
-        if not self._sessions:
-            return
+
         last_column = self._get_column("last")
         if last_column is None:
             return
+
+        # Batch update cells that have changed
+        updates_needed = []
         for session in self._sessions:
-            index = self._session_index.get(session.storage_key)
-            if index is None or session.storage_key in self._hidden_sessions:
+            if session.storage_key in self._hidden_sessions:
                 continue
-            row_key = str(index)
+
+            index = self._session_index.get(session.storage_key)
+            if index is None:
+                continue
+
             new_value = _format_relative(session.last_event_at or session.started_at)
+            cached_value = self._relative_time_cache.get(session.storage_key)
+
+            # Only update if value changed
+            if cached_value != new_value:
+                self._relative_time_cache[session.storage_key] = new_value
+                updates_needed.append((str(index), new_value))
+
+        # Apply batched updates
+        for row_key, new_value in updates_needed:
             self._table.update_cell(row_key, last_column.key, new_value)
+
         if self._active_row_index is not None:
             self._update_preview(self._active_row_index)
         if self._show_details and self._info_modal and self._current_session():
@@ -778,7 +888,9 @@ class CodexResumeApp(App[Optional[ResumeChoice]]):
         if hasattr(self, "_table"):
             self._table.disabled = True
         self._render_loading_frame()
-        self._loading_timer = self.set_interval(0.14, self._advance_loading_frame, pause=False)
+        self._loading_timer = self.set_interval(
+            LOADING_ANIMATION_INTERVAL, self._advance_loading_frame, pause=False
+        )
 
     def _stop_loading_animation(self) -> None:
         if self._loading_timer:
@@ -810,32 +922,45 @@ def _format_dt(dt_value: datetime) -> str:
 
 
 def _render_session_detail(session: Session, extra_args: Iterable[str]) -> Panel:
+    """Render detailed session information in a styled panel."""
     table = Table.grid(padding=(0, 1))
-    table.add_column(justify="right", style="cyan", width=12)
+    table.add_column(justify="right", style=f"{COLOR_CYAN} bold", width=14)
     table.add_column(no_wrap=True)
 
-    table.add_row("Summary", escape(session.summary))
-    table.add_row("Session ID", session.id)
-    table.add_row("Started", _format_verbose_dt(session.started_at))
+    table.add_row("Summary", f"[bold]{escape(session.summary)}[/bold]")
+    table.add_row("Session ID", f"[{COLOR_MUTED}]{session.id}[/{COLOR_MUTED}]")
+    table.add_row("Started", f"[{COLOR_YELLOW}]{_format_verbose_dt(session.started_at)}[/{COLOR_YELLOW}]")
+
     if session.last_event_at:
-        table.add_row("Last Event", f"{_format_verbose_dt(session.last_event_at)} ({_format_relative(session.last_event_at)})")
+        relative = _format_relative(session.last_event_at)
+        table.add_row(
+            "Last Event",
+            f"[{COLOR_YELLOW}]{_format_verbose_dt(session.last_event_at)}[/{COLOR_YELLOW}] [{COLOR_MUTED}]({relative})[/{COLOR_MUTED}]",
+        )
+
     if session.remote_host:
-        table.add_row("Remote Host", session.remote_host)
+        table.add_row("Remote Host", f"[{COLOR_MAGENTA}]{session.remote_host}[/{COLOR_MAGENTA}]")
+
     if session.cwd:
-        table.add_row("Working Dir", _format_session_dir(session, full=True))
+        table.add_row("Working Dir", f"[{COLOR_CYAN}]{_format_session_dir(session, full=True)}[/{COLOR_CYAN}]")
+
     if session.cli_version:
-        table.add_row("CLI Version", session.cli_version)
+        table.add_row("CLI Version", f"[{COLOR_GREEN}]{session.cli_version}[/{COLOR_GREEN}]")
+
     if session.originator:
         table.add_row("Originator", session.originator)
+
     extras = " ".join(shlex.quote(arg) for arg in extra_args) or "(none)"
-    table.add_row("Extra Args", extras)
-    table.add_row("Log File", _format_full_path(session.path))
+    table.add_row("Extra Args", f"[{COLOR_MUTED}]{extras}[/{COLOR_MUTED}]")
+    table.add_row("Log File", f"[{COLOR_MUTED}]{_format_full_path(session.path)}[/{COLOR_MUTED}]")
+
     events_value = (
         str(session.total_events) if session.total_events is not None else "Unknown (first 4KB scanned)"
     )
     table.add_row("Events", events_value)
+
     if session.truncated:
-        table.add_row("Log Sample", "Limited to first 4KB")
+        table.add_row("Log Sample", f"[{COLOR_YELLOW}]Limited to first 4KB[/{COLOR_YELLOW}]")
 
     if session.preview:
         preview_text = Text()
@@ -843,11 +968,12 @@ def _render_session_detail(session: Session, extra_args: Iterable[str]) -> Panel
             if idx:
                 preview_text.append("\n")
             label = (role or "message").strip().capitalize() or "Message"
-            preview_text.append(f"{label}: ", style="bold magenta")
+            style = f"bold {COLOR_GREEN}" if role == "assistant" else f"bold {COLOR_MAGENTA}"
+            preview_text.append(f"{label}: ", style=style)
             preview_text.append(snippet)
         table.add_row("Preview", preview_text)
 
-    return Panel(table, title="Session Details", border_style="green")
+    return Panel(table, title="[bold]Session Details[/bold]", border_style=COLOR_GREEN)
 
 
 def _format_verbose_dt(dt_value: datetime) -> str:
@@ -910,15 +1036,16 @@ def _format_session_dir(session: Session, full: bool = False) -> str:
 
 
 def _shorten_cwd(cwd: Optional[str], full: bool = False) -> str:
+    """Shorten working directory path for display."""
     if not cwd:
         return "-"
     display = _format_full_path(cwd)
     if full:
         return display
 
-    max_len = 28
+    # Handle home directory paths
     if display.startswith("~"):
-        if len(display) <= max_len:
+        if len(display) <= CWD_MAX_LENGTH:
             return display
         relative = display[2:].lstrip("/")
         if not relative:
@@ -926,18 +1053,19 @@ def _shorten_cwd(cwd: Optional[str], full: bool = False) -> str:
         parts = relative.split("/")
         if len(parts) == 1:
             candidate = f"~/{parts[0]}"
-            return candidate if len(candidate) <= max_len else candidate[: max_len - 1] + "…"
+            return candidate if len(candidate) <= CWD_MAX_LENGTH else candidate[: CWD_MAX_LENGTH - 1] + "…"
         suffix = "/".join(parts[-2:])
         candidate = f"~/{suffix}"
-        if len(candidate) <= max_len:
+        if len(candidate) <= CWD_MAX_LENGTH:
             return candidate
         tail = parts[-1]
-        short_tail = tail if len(tail) <= max_len - 2 else tail[: max_len - 3] + "…"
+        short_tail = tail if len(tail) <= CWD_MAX_LENGTH - 2 else tail[: CWD_MAX_LENGTH - 3] + "…"
         return f"~/{short_tail}"
 
+    # Handle absolute paths
     path = Path(cwd)
     candidate = path.name or str(path)
-    if len(candidate) <= 18:
+    if len(candidate) <= CWD_TRUNCATE_LENGTH:
         return candidate
     return candidate[:8] + "…" + candidate[-8:]
 

@@ -11,10 +11,19 @@ from pathlib import Path
 from typing import Callable, Iterable, List, Optional, Sequence, Tuple
 
 from .config import RemoteServerConfig
+from .constants import (
+    HEAD_LINE_LIMIT,
+    MAX_PREVIEW_MESSAGES,
+    PREVIEW_MAX_LENGTH,
+    PREVIEW_TRUNCATE_SUFFIX,
+    REMOTE_QUERY_TIMEOUT,
+    SUMMARY_MAX_LENGTH,
+    SUMMARY_TRUNCATE_SUFFIX,
+)
 
-_MAX_PREVIEW_MESSAGES = 6
-_HEAD_LINE_LIMIT = 16
-_REMOTE_QUERY_TIMEOUT = 20
+_HEAD_LINE_LIMIT = HEAD_LINE_LIMIT
+_REMOTE_QUERY_TIMEOUT = REMOTE_QUERY_TIMEOUT
+_MAX_PREVIEW_MESSAGES = MAX_PREVIEW_MESSAGES
 
 _SESSION_COLLECTOR_SCRIPT = textwrap.dedent(
     r"""
@@ -454,8 +463,9 @@ def _choose_summary(first_user: Optional[str], reasoning: Optional[str]) -> Opti
     if not candidate:
         return None
     single_line = " ".join(candidate.strip().split())
-    if len(single_line) > 160:
-        return single_line[:157] + "..."
+    if len(single_line) > SUMMARY_MAX_LENGTH:
+        truncate_at = SUMMARY_MAX_LENGTH - len(SUMMARY_TRUNCATE_SUFFIX)
+        return single_line[:truncate_at] + SUMMARY_TRUNCATE_SUFFIX
     return single_line
 
 
@@ -466,8 +476,9 @@ def _is_env_context(text: str) -> bool:
 
 def _condense_preview(text: str) -> str:
     single_line = " ".join(text.strip().split())
-    if len(single_line) > 120:
-        return single_line[:117] + "…"
+    if len(single_line) > PREVIEW_MAX_LENGTH:
+        truncate_at = PREVIEW_MAX_LENGTH - len(PREVIEW_TRUNCATE_SUFFIX)
+        return single_line[:truncate_at] + PREVIEW_TRUNCATE_SUFFIX
     return single_line
 
 
